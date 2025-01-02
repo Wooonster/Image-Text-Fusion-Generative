@@ -10,6 +10,7 @@ import io
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 # 数据集定义
 class ImageCaptionDataset(Dataset):
@@ -45,13 +46,16 @@ if __name__ == '__main__':
     # 加载数据
     pq_path = './train-00000-of-00010.parquet'
     dataset = ImageCaptionDataset(pq_path)
-    dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
 
     # 加载模型并移动到设备
     model = TextImageFusionModel().to(DEVICE)
 
     # 定义优化器
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=1e-5)
+
+    # 定义学习率调度器
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
 
     # 定义对比损失
     criterion_contrastive = contrastive_loss
@@ -60,12 +64,15 @@ if __name__ == '__main__':
     criterion_reconstruction = F.mse_loss  # 均方误差损失
 
     # 设置重建损失的权重
-    lambda_recon = 0.9  # 您可以根据需要调整这个值
+    lambda_recon = 1.0  # 您可以根据需要调整这个值
 
+    # 初始化损失记录列表
+    loss_history = [0] * 20
+    
     # 训练循环
-    num_epochs = 3
+    num_epochs = 20
+    print('Start Training..., total epochs: ', num_epochs)
     for epoch in tqdm(range(num_epochs)):
-        print('Start Training...')
         model.train()
         running_loss = 0.0
         for images, captions in dataloader:
@@ -103,5 +110,19 @@ if __name__ == '__main__':
 
             running_loss += total_loss.item()
 
+        # 步进学习率调度器
+        scheduler.step()
+
         epoch_loss = running_loss / len(dataloader)
+        loss_history[epoch] = epoch_loss
         print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {epoch_loss:.4f}')
+
+        # 绘制损失变化图
+        plt.figure()
+        plt.plot(range(1, num_epochs + 1), loss_history, label='Training Loss')
+        plt.xlabel('Epoch')
+        plt.ylabel('Loss')
+        plt.title('Training Loss Over Epochs')
+        plt.legend()
+        plt.savefig('loss_plot.png')
+        plt.show()
