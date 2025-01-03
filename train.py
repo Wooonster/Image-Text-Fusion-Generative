@@ -46,16 +46,16 @@ if __name__ == '__main__':
     # 加载数据
     pq_path = './train-00000-of-00010.parquet'
     dataset = ImageCaptionDataset(pq_path)
-    dataloader = DataLoader(dataset, batch_size=32, shuffle=True)
+    dataloader = DataLoader(dataset, batch_size=16, shuffle=True)
 
     # 加载模型并移动到设备
     model = TextImageFusionModel().to(DEVICE)
 
     # 定义优化器
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.005, weight_decay=1e-5)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-4)
 
     # 定义学习率调度器
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=5, gamma=0.1)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
 
     # 定义对比损失
     criterion_contrastive = contrastive_loss
@@ -64,13 +64,13 @@ if __name__ == '__main__':
     criterion_reconstruction = F.mse_loss  # 均方误差损失
 
     # 设置重建损失的权重
-    lambda_recon = 1.0  # 您可以根据需要调整这个值
+    lambda_recon = 0.5  # 您可以根据需要调整这个值
 
     # 初始化损失记录列表
-    loss_history = [0] * 20
+    loss_history = [0] * 30
     
     # 训练循环
-    num_epochs = 20
+    num_epochs = 30
     print('Start Training..., total epochs: ', num_epochs)
     for epoch in tqdm(range(num_epochs)):
         model.train()
