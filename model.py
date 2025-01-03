@@ -6,38 +6,45 @@ from torchvision import transforms, models
 from torchvision.models import resnet50, ResNet50_Weights
 from transformers import AutoTokenizer, AutoModel
 
-# 图像特征提取器
+
+# 冻结 ResNet 的特征提取器参数
 class ImageFeatureExtract(nn.Module):
     def __init__(self):
         super().__init__()
         resnet = resnet50(weights=ResNet50_Weights.DEFAULT)
-        self.feature_extract = nn.Sequential(
-            *list(resnet.children())[:-1]
-        )
+        for param in resnet.parameters():
+            param.requires_grad = False  # 冻结预训练参数
+        self.feature_extract = nn.Sequential(*list(resnet.children())[:-1])
 
     def forward(self, x):
         x = self.feature_extract(x)
         return x.view(x.size(0), -1)
-
-# 文本特征提取器
+   
+# 冻结 BERT 的特征提取器参数
 class TextFeatureExtract(nn.Module):
     def __init__(self):
         super().__init__()
         self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
         self.bert = AutoModel.from_pretrained("bert-base-uncased")
+        for param in self.bert.parameters():
+            param.requires_grad = False  # 冻结预训练参数
     
     def forward(self, text):
         inputs = self.tokenizer(text, return_tensors="pt", padding=True, truncation=True)
         inputs = {key: value.to(self.bert.device) for key, value in inputs.items()}  # 将输入移到 bert 所在设备
         outputs = self.bert(**inputs)
-        last_hidden_state = outputs.last_hidden_state  # [batch_size, seq_length, 768]
+        last_hidden_state = outputs.last_hidden_state
         return last_hidden_state
 
-# 映射网络
+# 修改映射网络
 class MappingNetwork(nn.Module):
     def __init__(self, input_dim, output_dim):
         super().__init__()
-        self.map = nn.Linear(input_dim, output_dim)
+        self.map = nn.Sequential(
+            nn.Linear(input_dim, 512),  # 增加隐藏层
+            nn.ReLU(),
+            nn.Linear(512, output_dim),  # 输出为目标维度
+        )
     
     def forward(self, x):
         x = self.map(x)
@@ -130,20 +137,10 @@ class TextImageFusionModel(nn.Module):
         # 返回解码器输出及图像和文本嵌入
         return output, img_mapped, txt_mapped
 
-# Contrastive Loss 定义
-def contrastive_loss(img_emb, txt_emb):
-    """
-    计算图像和文本嵌入之间的对比损失。
-
-    参数：
-        img_emb (torch.Tensor): 图像嵌入，形状为 [batch_size, embedding_dim]
-        txt_emb (torch.Tensor): 文本嵌入，形状为 [batch_size, embedding_dim]
-
-    返回：
-        torch.Tensor: 对比损失
-    """
-    similarity_matrix = torch.matmul(img_emb, txt_emb.T)  # [batch_size, batch_size]
-    labels = torch.arange(similarity_matrix.size(0)).to(img_emb.device)  # [batch_size]
+# Contrastive Loss
+def contrastive_loss(img_emb, txt_emb, temperature=0.07):
+    similarity_matrix = torch.matmul(img_emb, txt_emb.T) / temperature  # 添加温度缩放
+    labels = torch.arange(similarity_matrix.size(0)).to(img_emb.device)
     img_loss = F.cross_entropy(similarity_matrix, labels)
     txt_loss = F.cross_entropy(similarity_matrix.T, labels)
     return (img_loss + txt_loss) / 2
