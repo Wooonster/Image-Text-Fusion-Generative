@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from model import TextImageFusionModel, contrastive_loss
 from PIL import Image
 import io
+import os
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -117,12 +118,17 @@ if __name__ == '__main__':
         loss_history[epoch] = epoch_loss
         print(f'Epoch [{epoch+1}/{num_epochs}], Loss: {epoch_loss:.4f}')
 
-        # 绘制损失变化图
-        plt.figure()
-        plt.plot(range(1, num_epochs + 1), loss_history, label='Training Loss')
-        plt.xlabel('Epoch')
-        plt.ylabel('Loss')
-        plt.title('Training Loss Over Epochs')
-        plt.legend()
-        plt.savefig('loss_plot.png')
-        plt.show()
+    # save checkpoints
+    checkpoint_dir = './checkpoints'
+    os.makedirs(checkpoint_dir, exist_ok=True)
+    torch.save(model.state_dict(), os.path.join(checkpoint_dir, "best_model.pth"))
+
+    # 绘制损失变化图
+    plt.figure()
+    plt.plot(range(1, num_epochs + 1), loss_history, label='Training Loss')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.title('Training Loss Over Epochs')
+    plt.legend()
+    plt.savefig('loss_plot.png')
+    plt.show()
