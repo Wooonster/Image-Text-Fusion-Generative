@@ -1,2 +1,5 @@
 __pycache__
 *.parquet
+checkpoints/
+data/
+*.tar
